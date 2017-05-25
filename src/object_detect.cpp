@@ -4,6 +4,7 @@
 #include <cv_bridge/cv_bridge.h>
 #include "darknet_ros/DetectedObjects.h"
 #include "darknet_ros/ObjectInfo.h"
+#include "darknet_ros/ImageDetection.h"
 
 #include <opencv2/highgui/highgui.hpp>
 #include "opencv2/core/core.hpp"
@@ -15,14 +16,16 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <chrono>
+#include <utility>
+
 
 ArapahoV2* p;
 float thresh;
 ros::Publisher objPub_;
 image_transport::Publisher imgPub_;
-cv_bridge::CvImagePtr cv_ptr_;
+ros::ServiceServer yoloSrv_;
 
-void imageCallback(const sensor_msgs::ImageConstPtr& msg)
+std::pair<darknet_ros::DetectedObjects, cv_bridge::CvImagePtr> detectImage(sensor_msgs::Image msg)
 {
   try
   {
@@ -32,7 +35,7 @@ void imageCallback(const sensor_msgs::ImageConstPtr& msg)
     box* boxes = 0;
     std::string* labels;
     //cv_ptr_  = cv_bridge::toCvShare(msg, "bgr8");
-    cv_ptr_ = cv_bridge::toCvCopy( msg, sensor_msgs::image_encodings::BGR8);
+    cv_bridge::CvImagePtr cv_ptr_ = cv_bridge::toCvCopy( msg, sensor_msgs::image_encodings::BGR8);
 
     if( cv_ptr_.get()) 
     {
@@ -115,18 +118,40 @@ void imageCallback(const sensor_msgs::ImageConstPtr& msg)
 
       tObjMsg.objects = objectList;
       }// If objects were detected
-      objPub_.publish(tObjMsg);
-      imgPub_.publish(cv_ptr_->toImageMsg());
-      cv::imshow("view", cv_ptr_->image);
-      cv::waitKey(30);
-      cv_ptr_.reset();
+      
+      //cv_ptr_.reset();
+      return std::make_pair(tObjMsg, cv_ptr_);
     }
   }
   catch (cv_bridge::Exception& e)
   {
-    ROS_ERROR("Could not convert from '%s' to 'bgr8'.", msg->encoding.c_str());
+    ROS_ERROR("Could not convert from '%s' to 'bgr8'.", msg.encoding.c_str());
+    return std::make_pair(darknet_ros::DetectedObjects(), cv_bridge::CvImagePtr());
   }
 }
+
+bool imageDetectionService(darknet_ros::ImageDetectionRequest &req, darknet_ros::ImageDetectionResponse &resp)
+{
+    std::pair<darknet_ros::DetectedObjects, cv_bridge::CvImagePtr> result = detectImage(req.msg);
+    resp.objects = result.first;
+    resp.img = *(result.second->toImageMsg());
+    
+    if(resp.objects.objects.size())
+  return true;
+    else
+  return false;
+}
+
+void imageCallback(const sensor_msgs::ImageConstPtr msg)
+{
+    std::pair<darknet_ros::DetectedObjects, cv_bridge::CvImagePtr> result = detectImage(*msg);
+    
+    objPub_.publish(result.first);
+    imgPub_.publish(result.second->toImageMsg());
+    cv::imshow("view", result.second->image);
+    cv::waitKey(30);
+}
+    
 
 int main(int argc, char **argv)
 {
@@ -136,7 +161,6 @@ int main(int argc, char **argv)
   cv::startWindowThread();
 
   objPub_ = nh.advertise<darknet_ros::DetectedObjects>( "/darknet_ros/detected_objects", 1);
-  
 
   std::string ros_path = ros::package::getPath("darknet_ros");
   
@@ -184,6 +208,7 @@ int main(int argc, char **argv)
 
   imgPub_ = it.advertise( "/darknet_ros/image", 1);
   image_transport::Subscriber sub = it.subscribe("/camera/image_raw", 1, imageCallback);
+  yoloSrv_ = nh.advertiseService("/darknet_ros/detect_objects", imageDetectionService);
   
   ros::spin();
   cv::destroyWindow("view");
