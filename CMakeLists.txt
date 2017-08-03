@@ -1,6 +1,13 @@
 cmake_minimum_required(VERSION 2.8.3)
 project(darknet_ros)
-set (CMAKE_CXX_STANDARD 11)
+
+if (CMAKE_VERSION VERSION_LESS "3.1")
+  if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    set (CMAKE_CXX_FLAGS "--std=gnu++11 ${CMAKE_CXX_FLAGS}")
+  endif ()
+else ()
+  set (CMAKE_CXX_STANDARD 11)
+endif ()
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
@@ -123,7 +130,7 @@ generate_messages(
 catkin_package(
 #  INCLUDE_DIRS include
 #  LIBRARIES darknet_ros
-#  CATKIN_DEPENDS cv_bridge image_transport roscpp std_msgs
+  CATKIN_DEPENDS cv_bridge image_transport roscpp std_msgs message_runtime
 #  DEPENDS system_lib
 )
 
@@ -156,7 +163,7 @@ add_executable(darknet_ros_node src/object_detect.cpp
   ${PROJECT_SOURCE_DIR}/darknet/arapaho/arapaho.cpp)
 ## Add cmake target dependencies of the executable
 ## same as for the library above
-# add_dependencies(darknet_ros_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+add_dependencies(darknet_ros_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 add_library(darknet-cpp-shared SHARED IMPORTED)
 set_target_properties(darknet-cpp-shared PROPERTIES IMPORTED_LOCATION ${PROJECT_SOURCE_DIR}/darknet/libdarknet-cpp-shared.so)

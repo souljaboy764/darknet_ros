@@ -6,6 +6,7 @@
 #include "darknet_ros/ObjectInfo.h"
 #include "darknet_ros/ImageDetection.h"
 
+
 #include <opencv2/highgui/highgui.hpp>
 #include "opencv2/core/core.hpp"
 #include <opencv2/imgproc.hpp>
@@ -36,6 +37,7 @@ std::pair<darknet_ros::DetectedObjects, cv_bridge::CvImagePtr> detectImage(senso
     std::string* labels;
     //cv_ptr_  = cv_bridge::toCvShare(msg, "bgr8");
     cv_bridge::CvImagePtr cv_ptr_ = cv_bridge::toCvCopy( msg, sensor_msgs::image_encodings::BGR8);
+
 
     if( cv_ptr_.get()) 
     {
@@ -121,6 +123,10 @@ std::pair<darknet_ros::DetectedObjects, cv_bridge::CvImagePtr> detectImage(senso
       
       //cv_ptr_.reset();
       return std::make_pair(tObjMsg, cv_ptr_);
+//       objPub_.publish(tObjMsg);
+//       imgPub_.publish(cv_ptr_->toImageMsg());
+//       cv::waitKey(30);
+//       cv_ptr_.reset();
     }
   }
   catch (cv_bridge::Exception& e)
@@ -156,6 +162,7 @@ void imageCallback(const sensor_msgs::ImageConstPtr msg)
 int main(int argc, char **argv)
 {
   ros::init(argc, argv, "image_listener");
+
   ros::NodeHandle nh;
   cv::namedWindow("view");
   cv::startWindowThread();
@@ -169,16 +176,11 @@ int main(int argc, char **argv)
   std::string yoloConfigFile;
   std::string yoloDataFile;
   
-  priNh.param<std::string>( "weights_file", yoloWeightsFile, ros_path + "/input.weights" );
-  priNh.param<std::string>( "cfg_file", yoloConfigFile, ros_path+"/input.cfg" );
-  priNh.param<std::string>( "data_file", yoloDataFile, ros_path+"/input.name" );
+  priNh.param<std::string>( "weights_file", yoloWeightsFile, ros_path + "/tiny-yolo-voc.weights");
+  priNh.param<std::string>( "cfg_file", yoloConfigFile, ros_path + "/darknet/cfg/tiny-yolo-voc.cfg");
+  priNh.param<std::string>( "name_file", yoloDataFile, ros_path + "/darknet/data/voc.names" );
   priNh.param( "thresh", thresh, 0.2f );
-/*
-  std::string INPUT_DATA_FILE = ros_path + "/" + INPUT_DATA_FILE;
-  std::string INPUT_WEIGHTS_FILE = ros_path + "/" + INPUT_WEIGHTS_FILE;
-  std::string INPUT_CFG_FILE = ros_path + "/" + INPUT_CFG_FILE;
-  thresh = std::stof(threshold);
-*/
+  
   // Initialize darknet object using Arapaho API
   p = new ArapahoV2();
   if(!p)
@@ -188,9 +190,11 @@ int main(int argc, char **argv)
 
     // TODO - read from arapaho.cfg    
   ArapahoV2Params ap;
+
   ap.datacfg = (char *)yoloDataFile.c_str();//INPUT_DATA_FILE.c_str();
   ap.cfgfile = (char *)yoloConfigFile.c_str();//INPUT_CFG_FILE.c_str();
   ap.weightfile = (char *)yoloWeightsFile.c_str();//INPUT_WEIGHTS_FILE.c_str();
+
   ap.nms = 0.4;
   ap.maxClasses = 20;
   int expectedW = 0, expectedH = 0;
@@ -208,10 +212,11 @@ int main(int argc, char **argv)
 
   imgPub_ = it.advertise( "/darknet_ros/image", 1);
   image_transport::Subscriber sub = it.subscribe("/camera/image_raw", 1, imageCallback);
+  
   yoloSrv_ = nh.advertiseService("/darknet_ros/detect_objects", imageDetectionService);
+
   
   ros::spin();
-  cv::destroyWindow("view");
   if(p) delete p;
   DPRINTF("Exiting...\n");
   return 0;
